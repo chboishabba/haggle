@@ -346,6 +346,7 @@ class HaggleCoordinator(DataUpdateCoordinator[HaggleData]):
         )
         self.client = client
         self.contract_number = contract_number
+        self.half_hour_archive = None  # Set by integration setup before first refresh.
         self._latest_cumulative_kwh: float = 0.0
         # ToU bands (peak/offpeak/shoulder) known to have statistics for this
         # contract. Monotonic within a process; seeded from stored rows each
@@ -2439,6 +2440,13 @@ class HaggleCoordinator(DataUpdateCoordinator[HaggleData]):
                 reading_days=solar_reading_days,
                 junction=junction == TZ_REALIGN_GENERATION,
             )
+        # Only archive the original 30-minute readings after the standard HA
+        # Recorder import has succeeded. This does not alter hourly statistics.
+        if self.half_hour_archive is not None:
+            try:
+                await self.half_hour_archive.async_upsert(all_intervals, solar_intervals)
+            except Exception:
+                _LOGGER.exception("Half-hour archive update failed; HA Energy import unaffected")
 
     async def _fetch_sweep_day(
         self,

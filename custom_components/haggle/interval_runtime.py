@@ -63,8 +63,8 @@ class HaggleIntervalView(HomeAssistantView):
         params = request.query
         entry_id = params.get("entry_id")
         kind = params.get("kind", "import")
-        if kind not in ("import", "export"):
-            raise web.HTTPBadRequest(text="kind must be import or export")
+        if kind not in ("import", "export", "net"):
+            raise web.HTTPBadRequest(text="kind must be import, export or net")
         try:
             start = datetime.fromisoformat(params["start"].replace("Z", "+00:00"))
             end = datetime.fromisoformat(params["end"].replace("Z", "+00:00"))
@@ -85,6 +85,31 @@ class HaggleIntervalView(HomeAssistantView):
             archive = archives.get(entry_id)
         if archive is None:
             raise web.HTTPNotFound()
+
+        if kind == "net":
+            imports = {
+                r.start: r for r in await archive.async_query("import", start, end)
+            }
+            exports = {
+                r.start: r for r in await archive.async_query("export", start, end)
+            }
+            # Do not assume zero energy when a source has a missing interval.
+            stamps = sorted(imports.keys() & exports.keys())
+            return self.json({
+                "resolution_seconds": 1800,
+                "kind": "net",
+                "intervals": [
+                    {
+                        "start": t.isoformat(),
+                        "end": (t + timedelta(minutes=30)).isoformat(),
+                        "import_kwh": imports[t].kwh,
+                        "export_kwh": exports[t].kwh,
+                        "net_kwh": imports[t].kwh - exports[t].kwh,
+                        "net_average_w": (imports[t].kwh - exports[t].kwh) * 2000,
+                    }
+                    for t in stamps
+                ],
+            })
 
         records = await archive.async_query(kind, start, end)
         return self.json({

@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
+import math
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,14 +27,14 @@ class IntervalRecord:
     def as_dict(self) -> dict[str, Any]:
         """Return the stable JSON representation."""
         data = asdict(self)
-        data["start"] = self.start.isoformat()
+        data["start"] = self.start.astimezone(UTC).isoformat()
         return data
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> IntervalRecord:
         """Restore a record from the persisted representation."""
         return cls(
-            start=datetime.fromisoformat(str(data["start"])),
+            start=datetime.fromisoformat(str(data["start"])).astimezone(UTC),
             kind=str(data["kind"]),
             kwh=float(data["kwh"]),
             cost_aud=(
@@ -60,7 +61,17 @@ class IntervalArchive:
                 raise ValueError(f"unsupported interval kind: {record.kind}")
             if record.start.tzinfo is None:
                 raise ValueError("interval timestamps must be timezone-aware")
-            self._records[(contract, record.kind, record.start)] = record
+            if not math.isfinite(record.kwh) or record.kwh < 0:
+                raise ValueError("interval kWh must be finite and non-negative")
+            if record.cost_aud is not None and not math.isfinite(record.cost_aud):
+                raise ValueError("interval cost must be finite")
+            start = record.start.astimezone(UTC)
+            if start.minute not in (0, 30) or start.second or start.microsecond:
+                raise ValueError("interval timestamps must be on half-hour boundaries")
+            canonical = IntervalRecord(
+                start=start, kind=record.kind, kwh=record.kwh, cost_aud=record.cost_aud
+            )
+            self._records[(contract, record.kind, start)] = canonical
 
     def records(self, contract: str, kind: str) -> list[IntervalRecord]:
         """Return all records for a contract/kind in timestamp order."""
@@ -72,6 +83,19 @@ class IntervalArchive:
             ),
             key=lambda record: record.start,
         )
+
+    def query(
+        self, contract: str, kind: str, start: datetime, end: datetime
+    ) -> list[IntervalRecord]:
+        """Return half-open [start, end) records, in original UTC slots."""
+        if kind not in {"import", "export"}:
+            raise ValueError("invalid kind")
+        if start.tzinfo is None or end.tzinfo is None:
+            raise ValueError("query bounds must have timezones")
+        low, high = start.astimezone(UTC), end.astimezone(UTC)
+        if low >= high:
+            raise ValueError("start must precede end")
+        return [r for r in self.records(contract, kind) if low <= r.start < high]
 
     def to_json(self) -> str:
         """Serialize the archive for HA's persistent storage helper."""

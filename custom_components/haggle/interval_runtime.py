@@ -131,7 +131,10 @@ class HaggleIntervalView(HomeAssistantView):
 async def async_setup_archive(hass, entry_id: str, contract: str) -> HalfHourArchive:
     archive = HalfHourArchive(hass, entry_id, contract)
     await archive.async_load()
-    if not hass.data.get(_VIEW_KEY):
+    # The HTTP server is present during normal HA runtime.  Some config-entry
+    # tests construct Home Assistant without starting its HTTP component; the
+    # archive must not make the existing Haggle integration fail to load there.
+    if hass.http is not None and not hass.data.get(_VIEW_KEY):
         hass.http.register_view(HaggleIntervalView())
         hass.data[_VIEW_KEY] = True
     hass.data.setdefault(_ARCHIVES_KEY, {})[entry_id] = archive

@@ -8,7 +8,12 @@ from datetime import UTC, datetime, timedelta, timezone
 import struct
 
 from interval_archive import IntervalRecord
-from prom_remote_write import _snappy_literals, encode_write_request, records_to_series
+from prom_remote_write import (
+    _snappy_literals,
+    encode_write_request,
+    records_to_series,
+    records_since,
+)
 
 
 def _read_varint(data: bytes, pos: int = 0):
@@ -91,3 +96,11 @@ def test_utc_equivalent_times_address_same_series():
     _, a, _ = records_to_series("contract-test", [_record("import", t, 0.4)], [])
     _, b, _ = records_to_series("contract-test", [_record("import", local, 0.4)], [])
     assert a == b
+
+
+def test_records_since_excludes_backfill_older_than_receiver_window():
+    now = datetime(2026, 11, 14, 1, 0, tzinfo=UTC)
+    recent = _record("import", now - timedelta(hours=71), 0.4)
+    old = _record("import", now - timedelta(hours=73), 0.5)
+
+    assert records_since([old, recent], now=now, max_age=timedelta(hours=72)) == [recent]

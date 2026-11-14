@@ -7,16 +7,18 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
-from .prom_remote_write import encode_write_request, records_to_series
+from .prom_remote_write import encode_write_request, records_since, records_to_series
 
 _LOGGER = logging.getLogger(__name__)
 OPT_REMOTE_WRITE_URL = "prometheus_remote_write_url"
 OPT_REMOTE_WRITE_BEARER = "prometheus_remote_write_bearer"
+REMOTE_WRITE_MAX_AGE = timedelta(hours=72)
 
 
 class HalfHourRemotePublisher:
@@ -46,8 +48,17 @@ class HalfHourRemotePublisher:
             return
 
         async with self._lock:
-            imports = archive.archive.records(archive.contract, "import")
-            exports = archive.archive.records(archive.contract, "export")
+            now = datetime.now(UTC)
+            imports = records_since(
+                archive.archive.records(archive.contract, "import"),
+                now=now,
+                max_age=REMOTE_WRITE_MAX_AGE,
+            )
+            exports = records_since(
+                archive.archive.records(archive.contract, "export"),
+                now=now,
+                max_age=REMOTE_WRITE_MAX_AGE,
+            )
             groups, pending, conflicts = records_to_series(
                 archive.contract, imports, exports, sent=self._sent
             )

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import math
 import struct
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Iterable
 
 
@@ -70,6 +70,16 @@ def encode_write_request(series: dict[tuple[tuple[str, str], ...], list[tuple[in
             body.extend(_field_bytes(2, _sample(value, timestamp)))
         request.extend(_field_bytes(1, body))
     return _snappy_literals(bytes(request))
+
+
+def records_since(records: Iterable, *, now: datetime, max_age: timedelta) -> list:
+    """Keep only records recent enough for the receiver's delayed-write window."""
+    if now.tzinfo is None:
+        raise ValueError("now must be timezone-aware")
+    if max_age < timedelta(0):
+        raise ValueError("max_age must be non-negative")
+    cutoff = now.astimezone(UTC) - max_age
+    return [record for record in records if record.start.astimezone(UTC) >= cutoff]
 
 
 def records_to_series(

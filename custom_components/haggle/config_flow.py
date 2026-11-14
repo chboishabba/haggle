@@ -72,6 +72,7 @@ from .agl.pinning import (
     AGL_BFF_HOST_NAME,
     HagglePinningConnector,
 )
+from .prom_publisher import OPT_REMOTE_WRITE_URL, OPT_REMOTE_WRITE_BEARER
 from .const import (
     AGL_API_HOST,
     AGL_AUTH0_CLIENT,
@@ -800,9 +801,6 @@ class HaggleConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_LOCAL_TZ: local_tz,
             },
         )
-
-
-from .prom_publisher import OPT_REMOTE_WRITE_URL, OPT_REMOTE_WRITE_BEARER
 
 
 class HaggleOptionsFlow(OptionsFlow):

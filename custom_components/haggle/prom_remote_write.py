@@ -110,7 +110,7 @@ def records_to_series(
         add(
             "haggle_grid_net_average_w",
             stamp,
-            (import_rows[stamp].kwh - export_rows[stamp].kwh) * 2000,
+            round((import_rows[stamp].kwh - export_rows[stamp].kwh) * 2000, 10),
         )
 
     groups = {}

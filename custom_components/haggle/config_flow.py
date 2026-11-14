@@ -802,6 +802,9 @@ class HaggleConfigFlow(ConfigFlow, domain=DOMAIN):
         )
 
 
+from .prom_publisher import OPT_REMOTE_WRITE_URL, OPT_REMOTE_WRITE_BEARER
+
+
 class HaggleOptionsFlow(OptionsFlow):
     """Options: solar statistics-writing off-switch + poll-interval throttle.
 
@@ -825,6 +828,14 @@ class HaggleOptionsFlow(OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
+                    vol.Optional(
+                        OPT_REMOTE_WRITE_URL,
+                        default=self.config_entry.options.get(OPT_REMOTE_WRITE_URL, ""),
+                    ): str,
+                    vol.Optional(
+                        OPT_REMOTE_WRITE_BEARER,
+                        default=self.config_entry.options.get(OPT_REMOTE_WRITE_BEARER, ""),
+                    ): str,
                     vol.Required(
                         OPT_SOLAR_STATISTICS_ENABLED,
                         default=self.config_entry.options.get(

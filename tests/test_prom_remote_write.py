@@ -4,7 +4,7 @@ No Prometheus, Mimir or HAOS server is needed.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 import struct
 
 from interval_archive import IntervalRecord
@@ -87,7 +87,7 @@ def test_writer_has_valid_empty_snappy_envelope():
 
 def test_utc_equivalent_times_address_same_series():
     t = datetime(2026, 11, 12, 1, 30, tzinfo=UTC)
-    local = t.astimezone(UTC + timedelta(hours=10))
+    local = t.astimezone(timezone(timedelta(hours=10)))
     _, a, _ = records_to_series("contract-test", [_record("import", t, 0.4)], [])
     _, b, _ = records_to_series("contract-test", [_record("import", local, 0.4)], [])
     assert a == b

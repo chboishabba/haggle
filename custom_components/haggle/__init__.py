@@ -44,6 +44,8 @@ from .const import (
     PIN_MISMATCH_NOTIFICATION_ID,
 )
 from .coordinator import HaggleCoordinator
+from .interval_runtime import async_setup_archive, unload_archive
+from .prom_publisher import HalfHourRemotePublisher
 
 if TYPE_CHECKING:
     from datetime import tzinfo
@@ -275,6 +277,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: HaggleConfigEntry) -> bo
     await dt_util.async_get_time_zone(AGL_API_TZ_KEY)
     client = AglClient(auth, session, local_tz=local_tz, tz_is_contract=tz_is_contract)
     coordinator = HaggleCoordinator(hass, entry, client, contract_number)  # type: ignore[arg-type]
+
+    # Reuse this entry's existing authentication; no token is copied.
+    # Restore archived AGL slots before Haggle's first ingestion cycle.
+    coordinator.half_hour_archive = await async_setup_archive(
+        hass, entry.entry_id, contract_number
+    )
+    coordinator.half_hour_publisher = HalfHourRemotePublisher(hass, entry.entry_id)
+    await coordinator.half_hour_publisher.async_load()
+    entry.async_on_unload(
+        lambda: unload_archive(hass, entry.entry_id)
+    )
 
     await coordinator.async_config_entry_first_refresh()
 

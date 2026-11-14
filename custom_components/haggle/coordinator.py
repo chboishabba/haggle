@@ -346,6 +346,8 @@ class HaggleCoordinator(DataUpdateCoordinator[HaggleData]):
         )
         self.client = client
         self.contract_number = contract_number
+        self.half_hour_archive = None  # Set by integration setup before first refresh.
+        self.half_hour_publisher = None  # Optional remote-write to existing TSDB.
         self._latest_cumulative_kwh: float = 0.0
         # ToU bands (peak/offpeak/shoulder) known to have statistics for this
         # contract. Monotonic within a process; seeded from stored rows each
@@ -441,6 +443,15 @@ class HaggleCoordinator(DataUpdateCoordinator[HaggleData]):
         elif self.update_interval != configured_interval:
             _LOGGER.info("Poll succeeded; restoring %s cadence", configured_interval)
             self.update_interval = configured_interval
+        # Publication never changes Haggle's original Recorder or sensor output.
+        # Failures are logged/retried separately from the AGL poll cadence.
+        if self.half_hour_archive is not None and self.half_hour_publisher is not None:
+            try:
+                await self.half_hour_publisher.async_publish(
+                    self.half_hour_archive, self.config_entry.options
+                )
+            except Exception:
+                _LOGGER.exception("Optional Prometheus publishing failed")
         return data
 
     async def _fetch_and_import(self) -> HaggleData:
@@ -2439,6 +2450,13 @@ class HaggleCoordinator(DataUpdateCoordinator[HaggleData]):
                 reading_days=solar_reading_days,
                 junction=junction == TZ_REALIGN_GENERATION,
             )
+        # Only archive the original 30-minute readings after the standard HA
+        # Recorder import has succeeded. This does not alter hourly statistics.
+        if self.half_hour_archive is not None:
+            try:
+                await self.half_hour_archive.async_upsert(all_intervals, solar_intervals)
+            except Exception:
+                _LOGGER.exception("Half-hour archive update failed; HA Energy import unaffected")
 
     async def _fetch_sweep_day(
         self,
